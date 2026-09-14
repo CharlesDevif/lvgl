@@ -193,6 +193,26 @@ void lv_draw_nema_gfx_fill(lv_draw_task_t * t, const lv_draw_fill_dsc_t * dsc, c
                                           (float)(rel_coords.x1 + cx), (float)(rel_coords.y1 + cy),
                                           (float)r, extend_type | NEMA_FILTER_BL);
         }
+        else if(dsc->grad.dir == LV_GRAD_DIR_CONICAL) {
+            /*There was no branch for conical gradients at all. The paint object
+             *had just been cleared, so nothing was ever set on it and the
+             *background was drawn black -- with no warning anywhere that the
+             *direction was simply not handled by this draw unit.*/
+            nema_vg_paint_set_type(draw_nema_gfx_unit->paint, NEMA_VG_PAINT_GRAD_CONICAL);
+
+            int32_t w = lv_area_get_width(coords);
+            int32_t h = lv_area_get_height(coords);
+
+            /*NemaVG only takes the centre of the cone. Its sweep is always a
+             *full turn, so params.conical.start_angle and end_angle cannot be
+             *honoured: a gradient defined over part of a turn is rendered over
+             *the whole one. That is a visible difference from the software
+             *renderer, and the reason it is written down here.*/
+            nema_vg_paint_set_grad_conical(draw_nema_gfx_unit->paint, draw_nema_gfx_unit->gradient,
+                                           (float)(rel_coords.x1 + lv_pct_to_px(dsc->grad.params.conical.center.x, w)),
+                                           (float)(rel_coords.y1 + lv_pct_to_px(dsc->grad.params.conical.center.y, h)),
+                                           extend_type | NEMA_FILTER_BL);
+        }
 
         if(radius > 0.f)
             nema_vg_draw_rounded_rect(rel_coords.x1, rel_coords.y1, coords_bg_w, coords_bg_h, radius, radius, NULL,
