@@ -23,6 +23,8 @@ git remote -v
 | 4 | `nema_gfx`: clamp the stop count with `LV_MIN`, not `LV_MAX` | to submit |
 | 5 | `draw`: wait for the GPU even without an OS | to submit |
 | 6 | `draw`: do not freeze when a layer buffer cannot be allocated | ported from `amont/master` |
+| 7 | `draw/sw`: FreeType outlines drawn at `LV_OPA_TRANSP` | to submit |
+| 8 | `draw/sw`: ask ThorVG for straight alpha, not premultiplied | to submit |
 
 ### 1 — Fill rule
 
@@ -102,6 +104,47 @@ logging the failed task.
 
 Ported from `amont/master`, which carries the same change. Absent from the
 v9.5.0 release this branch is based on.
+
+### 7 — FreeType outlines drawn fully transparent
+
+`draw_letter_outline()` in `lv_draw_sw_letter.c` builds a draw task on the
+stack to render one glyph's outline, because it cannot call `lv_draw_vector()`
+from inside a draw unit. The task is zeroed, every field it needs is filled
+in -- and `opa` is not one of them. `LV_OPA_TRANSP` is 0, so that is what the
+task carries.
+
+`lv_draw_sw_vector()` passes it straight to `tvg_paint_set_opacity()`. Every
+glyph is therefore composited at zero opacity: the face loads, the outline is
+tessellated, the paths are correct, the temporary ARGB8888 buffer is allocated
+and cleared -- and stays cleared. The label is simply not there, with no error
+at any level.
+
+The per-glyph opacity is already applied, by
+`lv_draw_vector_dsc_set_fill_opa(vector_dsc, glyph_dsc->opa)` a few lines
+above, so the value that belongs on the task is the neutral one.
+
+This makes `LV_FREETYPE_FONT_RENDER_MODE_OUTLINE` unusable with the software
+renderer in v9.5.0 -- which is the only renderer a PC simulator has.
+
+### 8 — Premultiplied alpha handed to a blender that expects straight
+
+`lv_draw_sw_vector()` asks ThorVG for `TVG_COLORSPACE_ARGB8888`, which is the
+**alpha-premultiplied** variant; `TVG_COLORSPACE_ARGB8888S` is the straight
+one. But `LV_COLOR_FORMAT_ARGB8888` means straight everywhere else in LVGL --
+premultiplied has its own format -- and the buffer is then handed to
+`lv_draw_sw_image()` or `lv_draw_sw_blend_image_to_rgb565()`, both of which
+multiply by alpha again.
+
+Fully opaque and fully transparent pixels are unaffected, which is why it goes
+unnoticed on filled shapes: only antialiased edges are darkened toward the
+background. On small text almost every pixel is a partial one, so the whole
+label comes out washed out. Measured on the Dunetec demo at 14 px: the dimmed
+labels lost most of their contrast against the background.
+
+Changing the requested colorspace to `ARGB8888S` made the vector text match
+the bitmap rendering, and changed the SVG screen by **0 pixels** -- when the
+layer is already ARGB8888, ThorVG composites into it consistently and nothing
+re-blends it.
 
 ## Measured on hardware
 
