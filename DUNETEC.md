@@ -1,143 +1,143 @@
-# Branche `dunetec/9.5.0`
+# Branch `dunetec/9.5.0`
 
-LVGL **v9.5.0** plus les correctifs que le projet Dunetec a isolés sur
-STM32U5G9J-DK2 (NeoChrom GPU2D / NemaVG) et STM32F769I-DISCO.
+LVGL **v9.5.0** plus the fixes the Dunetec project isolated on an
+STM32U5G9J-DK2 (NeoChrom GPU2D / NemaVG) and an STM32F769I-DISCO.
 
-La base est le tag `v9.5.0`, pas `master` : le projet fige une version, et un
-correctif se juge sur la version qu'on livre. `amont` reste configuré pour
-suivre lvgl/lvgl.
+The base is the `v9.5.0` tag, not `master`: the project pins a release, and a
+fix is judged against the version you ship. `amont` stays configured to track
+lvgl/lvgl.
 
 ```
 git remote -v
-  origin  https://github.com/CharlesDevif/lvgl.git   (ce fork)
-  amont   https://github.com/lvgl/lvgl.git           (le dépôt d'origine)
+  origin  https://github.com/CharlesDevif/lvgl.git   (this fork)
+  amont   https://github.com/lvgl/lvgl.git           (upstream)
 ```
 
-## Ce que la branche ajoute
+## What the branch adds
 
-| # | Correctif | État en amont |
-|---|-----------|---------------|
-| 1 | `nema_gfx` : poser la règle de remplissage avant un fond dégradé | **PR #10688** ouverte |
-| 2 | `nema_gfx` : résoudre les pourcentages des dégradés radiaux | à soumettre |
-| 3 | `nema_gfx` : dessiner les dégradés coniques au lieu de noir | à soumettre |
-| 4 | `nema_gfx` : `LV_MIN` et non `LV_MAX` sur le nombre de paliers | à soumettre |
-| 5 | `draw` : attendre le GPU même sans système d'exploitation | à soumettre |
-| 6 | `draw` : ne pas figer quand un tampon de couche manque | porté depuis `amont/master` |
+| # | Fix | Upstream status |
+|---|-----|-----------------|
+| 1 | `nema_gfx`: set the fill rule before a gradient background | **PR #10688** open |
+| 2 | `nema_gfx`: resolve percentage units in radial gradients | to submit |
+| 3 | `nema_gfx`: draw conical gradients instead of black | to submit |
+| 4 | `nema_gfx`: clamp the stop count with `LV_MIN`, not `LV_MAX` | to submit |
+| 5 | `draw`: wait for the GPU even without an OS | to submit |
+| 6 | `draw`: do not freeze when a layer buffer cannot be allocated | ported from `amont/master` |
 
-### 1 — Règle de remplissage
+### 1 — Fill rule
 
-`lv_draw_nema_gfx_vector.c` laisse `NEMA_VG_STROKE` posé après chaque tracé
-qui a un contour, et ne le restaure pas. `lv_draw_nema_gfx_fill.c` ne pose
-jamais la règle. Un pictogramme vectoriel en trait seul laissait donc le GPU
-en mode contour, et le fond dégradé suivant sortait détouré au lieu d'être
-rempli. Un état global qu'on croit local.
+`lv_draw_nema_gfx_vector.c` leaves `NEMA_VG_STROKE` set after every path that
+has a stroke, and never restores it. `lv_draw_nema_gfx_fill.c` never sets the
+rule at all. A stroke-only vector icon therefore left the GPU in stroke mode,
+and the next gradient background came out outlined instead of filled. Global
+state that reads as local.
 
-### 2 — Pourcentages des dégradés radiaux
+### 2 — Percentage units in radial gradients
 
-La branche linéaire résout ses coordonnées avec `lv_pct_to_px()`, et
-`lv_draw_sw_grad_radial_setup()` fait de même pour les radiales. La branche
-radiale du pilote GPU les prenait brutes. `LV_GRAD_CENTER` vaut `LV_PCT(50)`,
-soit l'entier 536 870 962 : la façon documentée de centrer un dégradé radial
-était précisément celle qui le cassait. Le rayon était aussi pris comme la
-composante horizontale du vecteur d'extension au lieu de sa longueur.
+The linear branch resolves its coordinates with `lv_pct_to_px()`, and
+`lv_draw_sw_grad_radial_setup()` does the same for the radial ones. The radial
+branch of the GPU driver used them raw. `LV_GRAD_CENTER` expands to
+`LV_PCT(50)`, the integer 536870962, so the documented way of centring a
+radial gradient was exactly the one that broke it. The radius was also taken
+as the horizontal component of the extent vector rather than its length.
 
-### 3 — Dégradés coniques
+### 3 — Conical gradients
 
-Aucune branche n'existait pour `LV_GRAD_DIR_CONICAL` : l'objet de peinture
-gardait l'état laissé par `nema_vg_paint_clear()` et le fond sortait noir,
-sans le moindre avertissement. NemaVG expose `NEMA_VG_PAINT_GRAD_CONICAL`,
-donc le centre est honoré. L'API ne prend pas de plage angulaire : un dégradé
-défini sur une portion de tour est rendu sur le tour entier. C'est écrit dans
-le code.
+There was no branch for `LV_GRAD_DIR_CONICAL` at all: the paint object kept
+the state left by `nema_vg_paint_clear()` and the background was drawn black,
+with no warning anywhere. NemaVG exposes `NEMA_VG_PAINT_GRAD_CONICAL`, so the
+centre can be honoured. The API takes no angle range, so a gradient defined
+over part of a turn is rendered over the whole one. That is written down in
+the code.
 
-### 4 — Nombre de paliers
+### 4 — Stop count
 
-`lv_nemagfx_grad_set()` bornait sa boucle avec `LV_MAX(stops_count,
-LV_GRADIENT_MAX_STOPS)` alors que les tableaux font `LV_GRADIENT_MAX_STOPS`.
-Au-delà de la limite, la boucle écrit après la fin de deux tableaux de pile.
-En deçà, elle lit la queue non initialisée du tableau de paliers et la donne
-au GPU. `lv_draw_nema_gfx_fill.c` borne la même valeur avec `LV_MIN`.
+`lv_nemagfx_grad_set()` sized its loop with `LV_MAX(stops_count,
+LV_GRADIENT_MAX_STOPS)` while the arrays hold `LV_GRADIENT_MAX_STOPS` entries.
+Past that limit the loop writes beyond the end of two stack arrays. Below it,
+the loop still reads the uninitialised tail of the stop array and hands it to
+the GPU. `lv_draw_nema_gfx_fill.c` clamps the same value with `LV_MIN`.
 
-La fonction n'a aucun appelant dans l'arbre : le débordement n'est pas
-atteignable aujourd'hui, mais le symbole est exporté.
+The function has no caller inside the tree, so the overflow is not reachable
+today, but the symbol is exported.
 
-### 5 — Attente du GPU sans système d'exploitation
+### 5 — Waiting for the GPU without an OS
 
-Le corps entier de `lv_draw_wait_for_finish()` était sous `#if LV_USE_OS`.
-C'est juste pour le rendu logiciel, qui dessine dans son rappel de répartition
-et n'a rien en attente. Ça ne l'est pas pour un accélérateur : `lv_draw_nema_gfx`
-enregistre un `wait_for_finish_cb` qui soumet la liste de commandes et attend
-le GPU, et ce rappel n'était jamais appelé sans système d'exploitation.
+The whole body of `lv_draw_wait_for_finish()` sat behind `#if LV_USE_OS`. That
+is correct for the software draw unit, which draws inside its dispatch
+callback and has nothing outstanding. It is not correct for an accelerator:
+`lv_draw_nema_gfx` registers a `wait_for_finish_cb` that submits the command
+list and waits on the GPU, and that callback was simply never called without
+an RTOS.
 
-Conséquence observée : le rappel de vidage arme la permutation de tampon du
-LTDC alors que le NeoChrom écrit peut-être encore dans le tampon que le
-contrôleur va balayer. La course est courte — le retour de trame la couvre le
-plus souvent — ce qui est exactement ce qui la rend pénible à traquer.
+Observed consequence: the flush callback arms the LTDC buffer swap while the
+NeoChrom may still be writing into the buffer the controller is about to scan.
+The race is short — the vertical blanking usually covers it — which is exactly
+what makes it unpleasant to chase.
 
-Les unités de dessin qui n'enregistrent pas le rappel ne changent pas de
-comportement ; le rendu logiciel n'en enregistre aucun.
+Draw units that register no callback are unaffected; the software renderer
+registers none.
 
-### 6 — Gel quand un tampon de couche ne s'alloue pas
+### 6 — Freeze when a layer buffer cannot be allocated
 
-Quand `lv_draw_layer_alloc_buf()` rend NULL, les unités de dessin rendaient
-`LV_DRAW_UNIT_IDLE` en laissant la tâche dans son état précédent. Plus rien ne
-la faisait avancer : jamais redistribuée avec un tampon, jamais retirée. La
-couche ne se déclarait donc jamais terminée, et l'image non plus.
+When `lv_draw_layer_alloc_buf()` returns NULL the draw units returned
+`LV_DRAW_UNIT_IDLE` and left the task in its previous state. Nothing ever
+moved that task forward: never dispatched again with a buffer, never removed.
+The layer therefore never reported itself complete, and neither did the frame.
 
-Avec un système d'exploitation, l'appelant se bloque indéfiniment sur le
-sémaphore de dessin — processus vivant, 0 % de CPU, rien d'affiché. Sans, la
-boucle de rafraîchissement tourne sur la même couche. Dans les deux cas
-l'interface est figée, et la seule cause visible est qu'une couche dépassait
-ce que `LV_MEM_SIZE` autorise : un objet avec une transformation ou une
-opacité partielle suffit.
+With an OS, the caller blocks on the draw semaphore forever — process alive,
+0% CPU, nothing rendered. Without one, the refresh loop spins on the same
+layer. Either way the UI is frozen, and the only visible cause is that a layer
+happened to be larger than `LV_MEM_SIZE` allows: an object with a transform or
+a partial opacity is enough.
 
-La correction ajoute `LV_DRAW_TASK_STATE_FAILED`, le pose partout où une
-allocation de couche échoue, et retire les tâches en échec comme les tâches
-finies en journalisant l'erreur. L'image se termine alors avec cette tâche en
-moins — dégradé visible, donc récupérable — au lieu de ne pas se terminer.
+The fix adds `LV_DRAW_TASK_STATE_FAILED`, sets it wherever a layer allocation
+fails, and removes failed tasks alongside finished ones with an error logged.
+The frame then completes with that task missing — visibly degraded, therefore
+recoverable — instead of not completing at all.
 
-Mesuré : un objet de 300 × 300 transformé avec `LV_MEM_SIZE` à 48 Ko bloquait
-le programme de test 2 min 49 s à 0 % de CPU ; après correction il rend la
-main immédiatement en journalisant la tâche en échec.
+Measured: a 300 × 300 transformed object with `LV_MEM_SIZE` at 48 kB hung the
+test program for 2 min 49 s at 0% CPU; after the fix it returns immediately,
+logging the failed task.
 
-Porté depuis `amont/master`, qui porte le même changement. Absent de la
-v9.5.0 sur laquelle cette branche est basée.
+Ported from `amont/master`, which carries the same change. Absent from the
+v9.5.0 release this branch is based on.
 
-## Mesures sur carte
+## Measured on hardware
 
-STM32U5G9J-DK2, démonstration Dunetec, après les cinq correctifs :
-
-```
-écran GPU (cube en perspective)   60,6 i/s   0 famine FIFO   aucune faute
-7 allers-retours entrée/sortie    60,3 i/s   liste de commandes recyclée
-```
-
-## Ce qui reste ouvert
-
-`lv_draw_image.c`, branche « child layer » : `layer->_clip_area` est écrasé
-par la zone de l'image et jamais restauré. Tout ce qui est dessiné après dans
-la même couche devrait s'en trouver découpé. **Non confirmé** : le banc monté
-pour le démontrer n'atteint pas le rendu, la couche dépassant `LV_MEM_SIZE`
-(c'est ce qui a mené au correctif 6). À reprendre avec une couche plus petite.
-
-L'issue amont #9778 — pictogrammes SVG qui disparaîtraient sous un
-`transform_scale` de parent — **ne se reproduit pas** ici. Encre mesurée en
-pixels sur un tracé identique :
+STM32U5G9J-DK2, Dunetec demo, after the six fixes:
 
 ```
-sans parent                  1412        parent transform_scale 200    320
-parent sans transformation   1412        parent transform_scale 128    144
+GPU screen (perspective cube)     60.6 fps   0 FIFO underrun   no fault
+7 enter/leave round trips         60.3 fps   command list recycled
+```
+
+## What is still open
+
+`lv_draw_image.c`, "child layer" branch: `layer->_clip_area` is overwritten
+with the image area and never restored. Everything drawn afterwards in the
+same layer should end up clipped to it. **Unconfirmed**: the bench built to
+demonstrate it never reaches the rendering stage, the layer exceeding
+`LV_MEM_SIZE` (which is what led to fix 6). To revisit with a smaller layer.
+
+Upstream issue #9778 — SVG icons said to vanish under a parent's
+`transform_scale` — **does not reproduce** here. Ink measured in pixels on an
+identical path:
+
+```
+no parent                    1412        parent transform_scale 200    320
+parent, no transform         1412        parent transform_scale 128    144
 parent transform_scale 256   1412
 ```
 
-L'icône rétrécit, elle ne s'efface pas. Aucun correctif spéculatif n'est
-porté ici pour un défaut qu'on n'observe pas.
+The icon shrinks, it does not vanish. No speculative fix is carried here for a
+defect that cannot be observed.
 
-## Remonter un correctif en amont
+## Sending a fix upstream
 
 ```
-git checkout -b fix/<sujet> amont/master
-git cherry-pick <commit de cette branche>
+git checkout -b fix/<topic> amont/master
+git cherry-pick <commit from this branch>
 ```
 
-Les messages de commit sont rédigés en anglais et prêts pour une PR.
+Commit messages are written in English and ready for a pull request.
