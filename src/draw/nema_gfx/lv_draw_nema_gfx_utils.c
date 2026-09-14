@@ -114,7 +114,12 @@ void lv_nemagfx_grad_set(NEMA_VG_GRAD_HANDLE gradient, lv_grad_dsc_t lv_grad, lv
     float stops[LV_GRADIENT_MAX_STOPS];
     color_var_t colors[LV_GRADIENT_MAX_STOPS];
 
-    uint32_t cnt = LV_MAX(lv_grad.stops_count, LV_GRADIENT_MAX_STOPS);
+    /*LV_MIN, not LV_MAX: stops[] and colors[] below hold LV_GRADIENT_MAX_STOPS
+     *entries, and so does lv_grad.stops[]. Taking the maximum made the loop
+     *run past the end of all three as soon as stops_count exceeded the
+     *compile-time limit, and read uninitialised stops in every other case.
+     *lv_draw_nema_gfx_fill() already clamps the same value with LV_MIN.*/
+    uint32_t cnt = LV_MIN(lv_grad.stops_count, LV_GRADIENT_MAX_STOPS);
 
     for(uint8_t i = 0; i < cnt; i++) {
         stops[i] = (float)(lv_grad.stops[i].frac) / 255.f;
