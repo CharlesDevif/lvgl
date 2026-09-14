@@ -169,11 +169,29 @@ void lv_draw_nema_gfx_fill(lv_draw_task_t * t, const lv_draw_fill_dsc_t * dsc, c
         else if(dsc->grad.dir == LV_GRAD_DIR_RADIAL) {
             nema_vg_paint_set_type(draw_nema_gfx_unit->paint, NEMA_VG_PAINT_GRAD_RADIAL);
 
+            /*Radial parameters may be expressed in percent, exactly like the
+             *linear ones resolved above and like lv_draw_sw_grad_radial_setup()
+             *resolves them. They were used raw here, so the idiomatic call was
+             *the one that broke: LV_GRAD_CENTER is LV_PCT(50), which is the
+             *integer 536870962, and it placed the centre far outside the
+             *object. The gradient then rendered as a flat colour.*/
+            int32_t w = lv_area_get_width(coords);
+            int32_t h = lv_area_get_height(coords);
+
+            int32_t cx = lv_pct_to_px(dsc->grad.params.radial.end.x, w);
+            int32_t cy = lv_pct_to_px(dsc->grad.params.radial.end.y, h);
+            int32_t ex = lv_pct_to_px(dsc->grad.params.radial.end_extent.x, w);
+            int32_t ey = lv_pct_to_px(dsc->grad.params.radial.end_extent.y, h);
+
+            /*The radius is the distance from the centre to the extent point,
+             *not the horizontal component of it. Taking only x gave a radius of
+             *zero whenever the extent was given on the vertical axis. Same
+             *formula as the software renderer.*/
+            int32_t r = lv_sqrt32((uint32_t)(lv_sqr(ex - cx) + lv_sqr(ey - cy)));
+
             nema_vg_paint_set_grad_radial(draw_nema_gfx_unit->paint, draw_nema_gfx_unit->gradient,
-                                          rel_coords.x1 + dsc->grad.params.radial.end.x,
-                                          rel_coords.y1 + dsc->grad.params.radial.end.y,
-                                          LV_ABS(dsc->grad.params.radial.end_extent.x - dsc->grad.params.radial.end.x),
-                                          extend_type | NEMA_FILTER_BL);
+                                          (float)(rel_coords.x1 + cx), (float)(rel_coords.y1 + cy),
+                                          (float)r, extend_type | NEMA_FILTER_BL);
         }
 
         if(radius > 0.f)
