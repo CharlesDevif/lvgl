@@ -167,7 +167,7 @@ void lv_draw_finalize_task_creation(lv_layer_t * layer, lv_draw_task_t * t)
         }
         if(t->preferred_draw_unit_id == LV_DRAW_UNIT_NONE) {
             LV_LOG_WARN("the draw task was not taken by any units");
-            t->state = LV_DRAW_TASK_STATE_FINISHED;
+            t->state = LV_DRAW_TASK_STATE_FAILED;
         }
         else {
             lv_draw_dispatch();
@@ -252,7 +252,11 @@ bool lv_draw_dispatch_layer(lv_display_t * disp, lv_layer_t * layer)
     bool remove_task = false;
     while(t) {
         t_next = t->next;
-        if(t->state == LV_DRAW_TASK_STATE_FINISHED) {
+        if(t->state == LV_DRAW_TASK_STATE_FINISHED || t->state == LV_DRAW_TASK_STATE_FAILED) {
+            if(t->state == LV_DRAW_TASK_STATE_FAILED) {
+                LV_LOG_ERROR("draw task failed, type: %d", (int)t->type);
+            }
+
             cleanup_task(t, disp);
             remove_task = true;
             if(t_prev != NULL)
@@ -276,7 +280,9 @@ bool lv_draw_dispatch_layer(lv_display_t * disp, lv_layer_t * layer)
             if(t_src->type == LV_DRAW_TASK_TYPE_LAYER && t_src->state == LV_DRAW_TASK_STATE_BLOCKED) {
                 lv_draw_image_dsc_t * draw_dsc = t_src->draw_dsc;
                 if(draw_dsc->src == layer) {
-                    t_src->state = LV_DRAW_TASK_STATE_WAITING;
+                    t_src->state = t_src->preferred_draw_unit_id == LV_DRAW_UNIT_NONE
+                                   ? LV_DRAW_TASK_STATE_FAILED
+                                   : LV_DRAW_TASK_STATE_WAITING;
                     lv_draw_dispatch_request();
                     break;
                 }
