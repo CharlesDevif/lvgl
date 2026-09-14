@@ -1,7 +1,7 @@
 # Branch `dunetec/9.5.0`
 
-LVGL **v9.5.0** plus the fixes the Dunetec project isolated on an
-STM32U5G9J-DK2 (NeoChrom GPU2D / NemaVG) and an STM32F769I-DISCO.
+LVGL **v9.5.0** plus the fixes this project isolated on an STM32U5G9J-DK2
+(NeoChrom GPU2D / NemaVG) and an STM32F769I-DISCO.
 
 The base is the `v9.5.0` tag, not `master`: the project pins a release, and a
 fix is judged against the version you ship. `amont` stays configured to track
@@ -138,8 +138,8 @@ multiply by alpha again.
 Fully opaque and fully transparent pixels are unaffected, which is why it goes
 unnoticed on filled shapes: only antialiased edges are darkened toward the
 background. On small text almost every pixel is a partial one, so the whole
-label comes out washed out. Measured on the Dunetec demo at 14 px: the dimmed
-labels lost most of their contrast against the background.
+label comes out washed out. Measured at 14 px: the dimmed labels lost most
+of their contrast against the background.
 
 Changing the requested colorspace to `ARGB8888S` made the vector text match
 the bitmap rendering, and changed the SVG screen by **0 pixels** -- when the
@@ -148,7 +148,7 @@ re-blends it.
 
 ## Measured on hardware
 
-STM32U5G9J-DK2, Dunetec demo, after the six fixes:
+STM32U5G9J-DK2, capability demo, after the six fixes:
 
 ```
 GPU screen (perspective cube)     60.6 fps   0 FIFO underrun   no fault
