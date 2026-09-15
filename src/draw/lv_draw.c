@@ -194,19 +194,9 @@ void lv_draw_finalize_task_creation(lv_layer_t * layer, lv_draw_task_t * t)
 
 void lv_draw_wait_for_finish(void)
 {
-    /*This used to be compiled out entirely when LV_USE_OS was LV_OS_NONE.
-     *
-     *That holds for a software draw unit, which finishes its work inside its
-     *dispatch callback and has nothing to wait for. It does not hold for a
-     *hardware accelerator: a GPU draw unit returns as soon as the commands are
-     *queued, so its wait_for_finish_cb is the only thing that tells the caller
-     *the pixels are actually in memory. Whether an RTOS is present has no
-     *bearing on that -- the accelerator runs asynchronously either way.
-     *
-     *With the guard in place and no OS, a display driver that swaps buffers in
-     *its flush callback arms the swap while the GPU may still be writing into
-     *the buffer the controller is about to scan. Draw units without the
-     *callback are unaffected, so removing the guard costs them nothing.*/
+    /*Not behind LV_USE_OS: an accelerator returns once its commands are queued,
+     *so wait_for_finish_cb is the only thing that says the pixels have landed,
+     *RTOS or not. Draw units without the callback are unaffected.*/
     LV_PROFILER_DRAW_BEGIN;
     lv_draw_unit_t * u = _draw_info.unit_head;
     while(u) {

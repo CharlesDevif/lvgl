@@ -507,13 +507,9 @@ void lv_draw_sw_vector(lv_draw_task_t * t, lv_draw_vector_dsc_t * dsc)
         stride = new_buf->header.stride;
     }
     Tvg_Canvas * canvas = tvg_swcanvas_create();
-    /* ARGB8888S and not ARGB8888: the 'S' variant is the un-premultiplied one,
-     * and that is what LV_COLOR_FORMAT_ARGB8888 means everywhere else in LVGL
-     * -- premultiplied has its own format. Asking ThorVG for premultiplied
-     * pixels and then handing them to a blender that expects straight ones
-     * multiplies the alpha twice: every partially covered pixel is darkened
-     * toward the background. It shows on antialiased edges, and it is glaring
-     * on small text, where almost every pixel is a partial one. */
+    /* The 'S' variant is un-premultiplied, which is what
+     * LV_COLOR_FORMAT_ARGB8888 means to the blenders these pixels go to next.
+     * Without it the alpha is applied twice and every antialiased edge darkens. */
     tvg_swcanvas_set_target(canvas, buf, stride / 4, width, height, TVG_COLORSPACE_ARGB8888S);
 
     _tvg_rect rc;

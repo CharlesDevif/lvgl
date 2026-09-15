@@ -92,10 +92,9 @@ typedef enum {
      * and freed automatically. */
     LV_DRAW_TASK_STATE_FINISHED,
 
-    /** The draw task cannot be completed, e.g. the layer buffer could not be
-     * allocated. It is removed and freed like a finished one, so that the
-     * frame can complete with that task missing instead of never completing
-     * at all. */
+    /** Cannot be completed, e.g. the layer buffer could not be allocated.
+     * Removed like a finished task, so the frame completes without it
+     * rather than not completing at all. */
     LV_DRAW_TASK_STATE_FAILED,
 } lv_draw_task_state_t;
 

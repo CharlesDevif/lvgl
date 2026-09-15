@@ -37,21 +37,10 @@ extern GPU2D_HandleTypeDef hgpu2d;
 /* NemaGFX byte pool size in bytes.
  * One byte per peixel for masking/stencling plus 10240 for additional allocations.
  */
-/* Overridable, because 10240 is not a margin for every use of NemaVG.
- *
- * Nearly all of this pool is the one-byte-per-pixel stencil, and what is left
- * over -- ten kilobytes at any resolution -- has to serve every
- * nema_vg_path_create() and nema_vg_paint_create() the driver ever makes.
- * That is ample while paths are a handful of long-lived objects, and it is
- * not ample at all with LV_USE_FREETYPE in outline mode, where the glyph
- * cache creates one path AND one paint per cached glyph.
- *
- * The failure is not graceful. nema_vg_path_create() does not check what
- * nema_host_malloc() returns: it asks for 136 bytes and writes to offset 132
- * of the answer, so an exhausted pool is a store to 0x84 and a bus fault
- * inside a precompiled library. Observed on an STM32U5G9J-DK2 with a glyph
- * cache of 24 -- small enough to show that the size of the cache is not the
- * point, the pool simply has no room to spare. */
+/* Overridable: past the stencil, only 10240 bytes are left for every
+ * nema_vg_path_create() and nema_vg_paint_create(), and FreeType outline mode
+ * makes one of each per cached glyph. An exhausted pool is not reported --
+ * nema_vg_path_create() does not check its allocator, and faults. */
 #ifndef NEMAGFX_MEM_POOL_SIZE
     #if defined(LV_NEMA_GFX_MAX_RESX) && defined(LV_NEMA_GFX_MAX_RESY)
         #define NEMAGFX_MEM_POOL_SIZE      ((LV_NEMA_GFX_MAX_RESX * LV_NEMA_GFX_MAX_RESY) + 10240)

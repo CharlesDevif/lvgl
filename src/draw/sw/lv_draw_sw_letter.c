@@ -327,13 +327,9 @@ static void draw_letter_outline(lv_draw_task_t * t, lv_draw_glyph_dsc_t * glyph_
         dummy_t.target_layer = vector_dsc->base.layer;
         dummy_t.type = LV_DRAW_TASK_TYPE_VECTOR;
         dummy_t.draw_dsc = vector_dsc;
-        /* lv_draw_sw_vector() passes the task opacity to ThorVG through
-         * tvg_paint_set_opacity(). The task above was zeroed, so without this
-         * line every glyph is painted at LV_OPA_TRANSP: the outlines are
-         * tessellated correctly, the buffer stays empty, and the label simply
-         * does not appear. The per-glyph opacity is applied separately, by
-         * lv_draw_vector_dsc_set_fill_opa(vector_dsc, glyph_dsc->opa) above,
-         * so what belongs here is the neutral value. */
+        /* The task was zeroed, and lv_draw_sw_vector() hands its opa straight
+         * to ThorVG -- so without this every glyph draws fully transparent.
+         * The glyph's own opacity is already set on the fill, above. */
         dummy_t.opa = LV_OPA_COVER;
         lv_draw_sw_vector(&dummy_t, dummy_t.draw_dsc);
     }

@@ -27,15 +27,9 @@ extern "C" {
  *      DEFINES
  *********************/
 #ifndef LV_INV_BUF_SIZE
-/* Overridable. Past this many invalid areas in one frame, lv_refr_invalidate_area()
- * discards the list and invalidates the whole screen instead -- a cliff, not a
- * slope, and one a UI falls off silently: it just gets slow.
- *
- * Reaching it is easy. lv_obj_set_pos() invalidates twice, the area left and
- * the area entered, so a screen moving 17 small objects already overflows.
- *
- * It was a plain #define in a private header, so the one number that decides
- * between a partial redraw and a full one could not be set from lv_conf.h. */
+/* Overflowing this in one frame invalidates the whole screen instead, so it is
+ * worth tuning: lv_obj_set_pos() invalidates twice, once for the area left and
+ * once for the area entered. */
 #ifndef LV_INV_BUF_SIZE
 #define LV_INV_BUF_SIZE 32 /**< Buffer size for invalid areas */
 #endif
