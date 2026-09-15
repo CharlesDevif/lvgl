@@ -25,6 +25,8 @@ git remote -v
 | 6 | `draw`: do not freeze when a layer buffer cannot be allocated | ported from `amont/master` |
 | 7 | `draw/sw`: FreeType outlines drawn at `LV_OPA_TRANSP` | to submit |
 | 8 | `draw/sw`: ask ThorVG for straight alpha, not premultiplied | to submit |
+| 9 | `display`: let `LV_INV_BUF_SIZE` be configured | to submit |
+| 10 | `nema_gfx`: make FreeType outline text work at all | to submit |
 
 ### 1 — Fill rule
 
@@ -154,6 +156,33 @@ STM32U5G9J-DK2, capability demo, after the six fixes:
 GPU screen (perspective cube)     60.6 fps   0 FIFO underrun   no fault
 7 enter/leave round trips         60.3 fps   command list recycled
 ```
+
+### 9 — LV_INV_BUF_SIZE could not be set
+
+Past that many invalid areas in one frame, `lv_refr_invalidate_area()` discards
+the list and invalidates the whole screen. A cliff, not a slope, and one a UI
+falls off silently. `lv_obj_set_pos()` invalidates twice, so a screen moving
+seventeen small objects already overflows a buffer of thirty-two -- yet the
+number was a plain `#define` in a private header.
+
+### 10 — FreeType outline text on NeoChrom
+
+Three defects on one path, each hiding the next, and together they mean this
+combination had never run:
+
+- the path buffers were allocated from sizes that `lv_freetype_outline.c`
+  computes *after* sending `LV_EVENT_CREATE`, so they were allocated empty and
+  the first `move_to` failed its bounds assertion;
+- `NEMAGFX_MEM_POOL_SIZE` leaves 10240 bytes beside the stencil for every
+  `nema_vg_path_create()` and `nema_vg_paint_create()`, and the glyph cache
+  makes one of each per glyph. `nema_vg_path_create()` does not check its
+  allocator: CFSR 0x8200, BFAR 0x84, bus fault inside a precompiled library;
+- a reservation failing mid-contour left commands and coordinates out of step,
+  and a malformed command list makes `nema_wait_irq_cl()` wait forever.
+
+Measured after: seven screens at 800x480, 15 to 54 frames per second, no FIFO
+underrun. The board needs a 320 KiB LVGL heap in this mode -- at 192 the SVG
+renderer runs out after five or six screen changes.
 
 ## What is still open
 
