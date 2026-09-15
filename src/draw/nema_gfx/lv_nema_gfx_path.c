@@ -46,6 +46,14 @@
 static int data_point = 0;
 static int seg_point  = 0;
 
+/* Set when a reservation fails part-way through a contour. Skipping the point
+   and carrying on would hand NemaVG a path whose commands and coordinates no
+   longer correspond -- and a malformed command list does not fail, it makes
+   nema_wait_irq_cl() wait for a GPU interrupt that never comes, which on a
+   board without an OS is a hung display and nothing in the log. Better to
+   draw no glyph than to stop the machine. */
+static bool build_failed = false;
+
 lv_nema_gfx_path_t * lv_nema_gfx_path_create(void)
 {
     LV_PROFILER_DRAW_BEGIN;
@@ -55,10 +63,48 @@ lv_nema_gfx_path_t * lv_nema_gfx_path_create(void)
     nema_gfx_path->data = NULL;
     nema_gfx_path->seg_size = 0;
     nema_gfx_path->data_size = 0;
+    nema_gfx_path->seg_cap = 0;
+    nema_gfx_path->data_cap = 0;
+    build_failed = false;
     data_point = 0;
     seg_point  = 0;
     LV_PROFILER_DRAW_END;
     return nema_gfx_path;
+}
+
+/* Grows the buffers to hold `data` floats and `seg` commands.
+ *
+ * They used to be sized once, from lv_freetype_outline_event_param_t::sizes,
+ * and never checked again -- the push functions merely asserted that what
+ * arrived fitted. It never did: lv_freetype_outline.c zeroes the parameter
+ * before sending LV_EVENT_CREATE and only computes the sizes afterwards, so
+ * the driver allocated nothing at all and the first move_to failed its
+ * assertion. With LV_USE_LOG off that is a halted board and a black panel.
+ *
+ * The parameter passed with LV_EVENT_INSERT is zeroed too, so the real sizes
+ * never reach this driver by any route. Growing on demand is therefore the
+ * only fix that lives inside it. */
+static bool path_reserve(lv_nema_gfx_path_t * path, uint32_t data, uint32_t seg)
+{
+    if(data > path->data_cap) {
+        uint32_t cap = path->data_cap ? path->data_cap * 2 : 64;
+        if(cap < data) cap = data;
+        float * p = (float *) lv_realloc(path->data, cap * sizeof(float));
+        LV_ASSERT_MALLOC(p);
+        if(p == NULL) return false;
+        path->data = p;
+        path->data_cap = cap;
+    }
+    if(seg > path->seg_cap) {
+        uint32_t cap = path->seg_cap ? path->seg_cap * 2 : 32;
+        if(cap < seg) cap = seg;
+        uint8_t * p = (uint8_t *) lv_realloc(path->seg, cap * sizeof(uint8_t));
+        LV_ASSERT_MALLOC(p);
+        if(p == NULL) return false;
+        path->seg = p;
+        path->seg_cap = cap;
+    }
+    return true;
 }
 
 void lv_nema_gfx_path_alloc(lv_nema_gfx_path_t * nema_gfx_path)
@@ -66,10 +112,9 @@ void lv_nema_gfx_path_alloc(lv_nema_gfx_path_t * nema_gfx_path)
     LV_PROFILER_DRAW_BEGIN;
     nema_gfx_path->path = nema_vg_path_create();
     nema_gfx_path->paint = nema_vg_paint_create();
-    nema_gfx_path->data = (float *) lv_malloc(nema_gfx_path->data_size * sizeof(float));
-    LV_ASSERT_MALLOC(nema_gfx_path->data);
-    nema_gfx_path->seg = (uint8_t *) lv_malloc(nema_gfx_path->seg_size * sizeof(uint8_t));
-    LV_ASSERT_MALLOC(nema_gfx_path->seg);
+    /* The sizes are not known yet -- see path_reserve(). Whatever they claim
+     * to be at this point is taken as a hint and nothing more. */
+    path_reserve(nema_gfx_path, nema_gfx_path->data_size, nema_gfx_path->seg_size);
     LV_PROFILER_DRAW_END;
 }
 
@@ -103,8 +148,11 @@ void lv_nema_gfx_path_destroy(lv_nema_gfx_path_t * nema_gfx_path)
 void lv_nema_gfx_path_move_to(lv_nema_gfx_path_t * path, float x, float y)
 {
     LV_ASSERT_NULL(path);
-    LV_ASSERT(path->data_size > data_point + 1);
-    LV_ASSERT(path->seg_size > seg_point);
+    if(build_failed) return;
+    if(!path_reserve(path, (uint32_t)data_point + 2, (uint32_t)seg_point + 1)) {
+        build_failed = true;
+        return;
+    }
     path->seg[seg_point++] = NEMA_VG_PRIM_MOVE;
     path->data[data_point++] = x;
     path->data[data_point++] = y;
@@ -113,8 +161,11 @@ void lv_nema_gfx_path_move_to(lv_nema_gfx_path_t * path, float x, float y)
 void lv_nema_gfx_path_line_to(lv_nema_gfx_path_t * path, float x, float y)
 {
     LV_ASSERT_NULL(path);
-    LV_ASSERT(path->data_size > data_point + 1);
-    LV_ASSERT(path->seg_size > seg_point);
+    if(build_failed) return;
+    if(!path_reserve(path, (uint32_t)data_point + 2, (uint32_t)seg_point + 1)) {
+        build_failed = true;
+        return;
+    }
     path->seg[seg_point++] = NEMA_VG_PRIM_LINE;
     path->data[data_point++] = x;
     path->data[data_point++] = y;
@@ -124,8 +175,11 @@ void lv_nema_gfx_path_line_to(lv_nema_gfx_path_t * path, float x, float y)
 void lv_nema_gfx_path_quad_to(lv_nema_gfx_path_t * path, float cx, float cy, float x, float y)
 {
     LV_ASSERT_NULL(path);
-    LV_ASSERT(path->data_size > data_point + 3);
-    LV_ASSERT(path->seg_size > seg_point);
+    if(build_failed) return;
+    if(!path_reserve(path, (uint32_t)data_point + 4, (uint32_t)seg_point + 1)) {
+        build_failed = true;
+        return;
+    }
     path->seg[seg_point++] = NEMA_VG_PRIM_BEZIER_QUAD;
     path->data[data_point++] = cx;
     path->data[data_point++] = cy;
@@ -136,8 +190,11 @@ void lv_nema_gfx_path_quad_to(lv_nema_gfx_path_t * path, float cx, float cy, flo
 void lv_nema_gfx_path_cubic_to(lv_nema_gfx_path_t * path, float cx1, float cy1, float cx2, float cy2, float x, float y)
 {
     LV_ASSERT_NULL(path);
-    LV_ASSERT(path->data_size > data_point + 5);
-    LV_ASSERT(path->seg_size > seg_point);
+    if(build_failed) return;
+    if(!path_reserve(path, (uint32_t)data_point + 6, (uint32_t)seg_point + 1)) {
+        build_failed = true;
+        return;
+    }
     path->seg[seg_point++] = NEMA_VG_PRIM_BEZIER_CUBIC;
     path->data[data_point++] = cx1;
     path->data[data_point++] = cy1;
@@ -149,10 +206,17 @@ void lv_nema_gfx_path_cubic_to(lv_nema_gfx_path_t * path, float cx1, float cy1, 
 
 void lv_nema_gfx_path_end(lv_nema_gfx_path_t * path)
 {
-    /* Do Path end jobs....whatever*/
+    /* What _draw_nema_gfx_outline() hands to nema_vg_path_set_shape() is
+     * data_size and seg_size, so they have to end up holding what was written
+     * rather than what was reserved -- the two were the same number only for
+     * as long as the buffers were sized exactly. */
+    if(path != NULL) {
+        path->data_size = build_failed ? 0u : (uint32_t)data_point;
+        path->seg_size  = build_failed ? 0u : (uint32_t)seg_point;
+    }
+    build_failed = false;
     seg_point = 0;
     data_point = 0;
-
 }
 
 #endif  /*LV_USE_NEMA_VG*/

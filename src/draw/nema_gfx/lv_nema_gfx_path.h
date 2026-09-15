@@ -54,8 +54,14 @@ typedef struct {
     NEMA_VG_PAINT_HANDLE paint;
     float * data;
     uint8_t * seg;
+    /* What the path holds, and what it can hold. They were one field, because
+     * the buffers used to be sized once and filled exactly; the outline path
+     * grows on demand now, so the amount handed to NemaVG and the amount
+     * allocated are no longer the same number. */
     uint32_t data_size;
     uint32_t seg_size;
+    uint32_t data_cap;
+    uint32_t seg_cap;
 } lv_nema_gfx_path_t;
 
 /**********************
