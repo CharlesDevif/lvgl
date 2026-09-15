@@ -17,7 +17,7 @@ git remote -v
 
 | # | Fix | Upstream status |
 |---|-----|-----------------|
-| 1 | `nema_gfx`: set the fill rule before a gradient background | **PR #10688** open |
+| 1 | `nema_gfx`: set the fill rule before a gradient background | **PR #10688** — validated, not merged |
 | 2 | `nema_gfx`: resolve percentage units in radial gradients | to submit |
 | 3 | `nema_gfx`: draw conical gradients instead of black | to submit |
 | 4 | `nema_gfx`: clamp the stop count with `LV_MIN`, not `LV_MAX` | to submit |
@@ -156,6 +156,27 @@ GPU screen (perspective cube)     60.6 fps   0 FIFO underrun   no fault
 ```
 
 ## What is still open
+
+`lv_draw_nema_gfx_label.c`, `_draw_nema_gfx_outline()`: the same defect as
+fix 1, one subsystem over. The function calls
+
+```c
+nema_vg_set_fill_rule(NEMA_VG_FILL_EVEN_ODD);
+```
+
+before every glyph and never restores it, so the rule a caller had set is
+gone once a label has been drawn -- global state written as if it were local,
+which is exactly what fix 1 is about.
+
+It is also the wrong rule. TrueType contours are defined by the **non-zero
+winding** rule; even-odd differs wherever a glyph's contours overlap, which
+they do on accented and italic forms where the mark crosses the letter.
+
+Found while chasing a black panel on the STM32U5G9J-DK2 with vector text on.
+**Not fixed here yet, deliberately**: that build is the one under
+investigation, and changing it now would add a variable to the diagnosis.
+To fix once the freeze is understood -- and it is the natural follow-up PR to
+#10688, whose reasoning a maintainer has already accepted.
 
 `lv_draw_image.c`, "child layer" branch: `layer->_clip_area` is overwritten
 with the image area and never restored. Everything drawn afterwards in the
