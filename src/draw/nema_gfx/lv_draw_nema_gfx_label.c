@@ -176,8 +176,29 @@ static void _draw_nema_gfx_outline(lv_draw_task_t * t, lv_draw_glyph_dsc_t * gly
 
     nema_vg_set_fill_rule(NEMA_VG_FILL_EVEN_ODD);
 
-    nema_vg_path_set_shape(nema_gfx_path->path, nema_gfx_path->seg_size, nema_gfx_path->seg, nema_gfx_path->data_size,
-                           nema_gfx_path->data);
+    /*Hand NemaVG the glyph box instead of letting it find one.
+     *
+     *nema_vg_path_set_shape() walks every control point of the path to build a
+     *bounding box; the vendor header documents set_shape_and_bbox() as the same
+     *thing with the box supplied, and says it "reduces CPU utilization".
+     *FreeType has already measured this glyph -- box_w, box_h, ofs_x, ofs_y --
+     *so the walk is redone every frame for something already known.
+     *
+     *The box is in the path's own space, so the matrix above is inverted: it
+     *scales by `scale` and translates, hence the division. One unit of margin
+     *on each side, because a box that is too small clips the glyph while one
+     *that is slightly too large only costs what we are trying to save.*/
+    const float inv = 1.0f / scale;
+    const float bx0 = (float)glyph_draw_dsc->g->ofs_x * inv;
+    const float by0 = (float)glyph_draw_dsc->g->ofs_y * inv;
+    nema_vg_float_t bbox[4] = {
+        bx0 - 1.0f,
+        by0 - 1.0f,
+        bx0 + (float)glyph_draw_dsc->g->box_w * inv + 1.0f,
+        by0 + (float)glyph_draw_dsc->g->box_h * inv + 1.0f,
+    };
+    nema_vg_path_set_shape_and_bbox(nema_gfx_path->path, nema_gfx_path->seg_size, nema_gfx_path->seg,
+                                    nema_gfx_path->data_size, nema_gfx_path->data, bbox);
 
     nema_vg_paint_set_type(nema_gfx_path->paint, NEMA_VG_PAINT_COLOR);
 
