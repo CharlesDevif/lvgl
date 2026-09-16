@@ -27,6 +27,7 @@ git remote -v
 | 8 | `draw/sw`: ask ThorVG for straight alpha, not premultiplied | to submit |
 | 9 | `display`: let `LV_INV_BUF_SIZE` be configured | to submit |
 | 10 | `nema_gfx`: make FreeType outline text work at all | to submit |
+| 11 | `draw`: count where the drawing actually went | to submit |
 
 ### 1 — Fill rule
 

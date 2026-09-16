@@ -47,6 +47,10 @@ static inline uint32_t get_layer_size_kb(uint32_t size_byte)
 }
 #endif
 
+#if LV_USE_PERF_MONITOR
+lv_draw_stats_t lv_draw_stats;
+#endif
+
 /**********************
  *  STATIC VARIABLES
  **********************/

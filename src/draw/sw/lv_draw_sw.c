@@ -298,6 +298,9 @@ static int32_t dispatch(lv_draw_unit_t * draw_unit, lv_layer_t * layer)
         /*Take the task*/
         all_idle = false;
         taken_cnt++;
+#if LV_USE_PERF_MONITOR
+        lv_draw_stats_took((uint32_t)t->type, false);
+#endif
         t->state = LV_DRAW_TASK_STATE_IN_PROGRESS;
         thread_dsc->task_act = t;
 
@@ -330,6 +333,9 @@ static int32_t dispatch(lv_draw_unit_t * draw_unit, lv_layer_t * layer)
         return LV_DRAW_UNIT_IDLE;  /*Couldn't start rendering*/
     }
 
+#if LV_USE_PERF_MONITOR
+    lv_draw_stats_took((uint32_t)t->type, false);
+#endif
     t->state = LV_DRAW_TASK_STATE_IN_PROGRESS;
     draw_sw_unit->task_act = t;
 

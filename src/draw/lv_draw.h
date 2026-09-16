@@ -194,6 +194,46 @@ typedef struct {
     void * user_data;
 } lv_draw_dsc_base_t;
 
+#if LV_USE_PERF_MONITOR
+/**
+ * Where the drawing actually went.
+ *
+ * A display's `cpu` figure is `100 - idle`, and idle is the share of wall
+ * clock spent outside `lv_timer_handler()`. Accelerated drawing happens
+ * inside it, so it is counted as processor load and cannot be told apart
+ * from that number alone. `gpu_tasks` and `sw_tasks` say where the drawing
+ * went, which is the question that number cannot answer.
+ *
+ * The counters are free running; read them, and subtract what you read last
+ * time to get a rate.
+ */
+typedef struct {
+    uint32_t gpu_tasks;     /**< draw tasks an accelerator took */
+    uint32_t sw_tasks;      /**< draw tasks the processor drew itself */
+    uint32_t gpu_busy_ms;   /**< time spent inside the accelerator's draw unit */
+    uint32_t by_type[20];   /**< tasks per LV_DRAW_TASK_TYPE_*, whichever unit took them */
+} lv_draw_stats_t;
+
+extern lv_draw_stats_t lv_draw_stats;
+
+/**
+ * Record that a draw unit has taken a task. Call it where the task's state
+ * becomes `LV_DRAW_TASK_STATE_IN_PROGRESS` and nowhere else: a task offered
+ * and refused would otherwise be counted, and a unit may be offered the same
+ * task several times before taking it.
+ * Takes the type rather than the task: this sits above the definition of
+ * `lv_draw_task_t`, which is where the struct needs it.
+ * @param type      the task's `type` field
+ * @param is_gpu    true if an accelerator took it, false for the processor
+ */
+static inline void lv_draw_stats_took(uint32_t type, bool is_gpu)
+{
+    if(is_gpu) lv_draw_stats.gpu_tasks++;
+    else lv_draw_stats.sw_tasks++;
+    if(type < 20) lv_draw_stats.by_type[type]++;
+}
+#endif
+
 /**********************
  * GLOBAL PROTOTYPES
  **********************/

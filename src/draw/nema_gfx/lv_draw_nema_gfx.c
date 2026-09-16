@@ -283,6 +283,10 @@ static int32_t nema_gfx_dispatch(lv_draw_unit_t * draw_unit, lv_layer_t * layer)
         return LV_DRAW_UNIT_IDLE;
     }
 
+#if LV_USE_PERF_MONITOR
+    lv_draw_stats_took((uint32_t)t->type, true);
+#endif
+
     t->state = LV_DRAW_TASK_STATE_IN_PROGRESS;
     draw_nema_gfx_unit->task_act = t;
 
@@ -291,7 +295,20 @@ static int32_t nema_gfx_dispatch(lv_draw_unit_t * draw_unit, lv_layer_t * layer)
     if(draw_nema_gfx_unit->inited)
         lv_thread_sync_signal(&draw_nema_gfx_unit->sync);
 #else
+#if LV_USE_PERF_MONITOR
+    /*Measured here and not around nema_cl_wait: wait_for_finish_cb is only
+     *reached through lv_canvas, never by a screen refresh, and the primitives
+     *submit their own command lists -- lv_draw_nema_gfx_fill.c submits without
+     *waiting, lv_draw_nema_gfx_label.c waits on every string. So there is no
+     *single point where the processor blocks on the GPU, and what can be
+     *timed is the whole of this unit's share: building the commands, handing
+     *them over, and whatever waiting the primitive does on its own.*/
+    uint32_t start = lv_tick_get();
+#endif
     nema_gfx_execute_drawing(draw_nema_gfx_unit);
+#if LV_USE_PERF_MONITOR
+    lv_draw_stats.gpu_busy_ms += lv_tick_elaps(start);
+#endif
 
     draw_nema_gfx_unit->task_act->state = LV_DRAW_TASK_STATE_FINISHED;
     draw_nema_gfx_unit->task_act = NULL;
