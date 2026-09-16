@@ -339,7 +339,17 @@ static int32_t dispatch(lv_draw_unit_t * draw_unit, lv_layer_t * layer)
     t->state = LV_DRAW_TASK_STATE_IN_PROGRESS;
     draw_sw_unit->task_act = t;
 
+#if LV_USE_PERF_MONITOR
+    /*The counterpart of gpu_busy_ms: what the processor draws when no
+     *accelerator would take the task. Without it a screen can look as if its
+     *time went nowhere -- the accelerator's share is small, and the rest is
+     *assumed to be bookkeeping when it is really rasterising.*/
+    uint32_t sw_start = lv_tick_get();
+#endif
     execute_drawing(t);
+#if LV_USE_PERF_MONITOR
+    lv_draw_stats.sw_busy_ms += lv_tick_elaps(sw_start);
+#endif
     draw_sw_unit->task_act->state = LV_DRAW_TASK_STATE_FINISHED;
     draw_sw_unit->task_act = NULL;
 

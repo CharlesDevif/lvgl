@@ -211,6 +211,7 @@ typedef struct {
     uint32_t gpu_tasks;     /**< draw tasks an accelerator took */
     uint32_t sw_tasks;      /**< draw tasks the processor drew itself */
     uint32_t gpu_busy_ms;   /**< time spent inside the accelerator's draw unit */
+    uint32_t sw_busy_ms;    /**< time the processor spent drawing itself */
     uint32_t by_type[20];   /**< tasks per LV_DRAW_TASK_TYPE_*, whichever unit took them */
 } lv_draw_stats_t;
 
