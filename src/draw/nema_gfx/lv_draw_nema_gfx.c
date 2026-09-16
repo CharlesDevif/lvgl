@@ -222,7 +222,14 @@ static int32_t nema_gfx_evaluate(lv_draw_unit_t * draw_unit, lv_draw_task_t * ta
         case LV_DRAW_TASK_TYPE_LINE: {
                 lv_draw_line_dsc_t * draw_line_dsc = (lv_draw_line_dsc_t *) task->draw_dsc;
                 bool is_dashed = (draw_line_dsc->dash_width && draw_line_dsc->dash_gap);
-                if(!is_dashed && !(draw_line_dsc->round_end || draw_line_dsc->round_start)) {
+                /*Round caps are drawn here now, as a disc on each end point,
+                 *so they are no longer a reason to decline the task -- but only
+                 *while the colour is opaque. A disc laid over the line covers
+                 *the antialiased edge the line has already written, and a
+                 *translucent one would blend with it a second time and show a
+                 *seam. At full opacity it simply overwrites.*/
+                bool capped = (draw_line_dsc->round_start || draw_line_dsc->round_end);
+                if(!is_dashed && (!capped || draw_line_dsc->opa >= (lv_opa_t)LV_OPA_MAX)) {
                     if(task->preference_score > 80) {
                         task->preference_score = 80;
                         task->preferred_draw_unit_id = DRAW_UNIT_ID_NEMA_GFX;

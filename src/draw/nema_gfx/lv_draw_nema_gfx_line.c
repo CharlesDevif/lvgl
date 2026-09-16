@@ -90,6 +90,16 @@ void lv_draw_nema_gfx_line(lv_draw_task_t * t, const lv_draw_line_dsc_t * dsc)
 
     nema_draw_line_aa(point1.x, point1.y, point2.x, point2.y, dsc->width, bg_color);
 
+    /*A round cap is a disc of half the width, centred on the end point.
+     *nema_draw_line_aa has no cap parameter, so a capped line used to be
+     *handed back to the software renderer whole; two native commands keep it
+     *on the accelerator. The clip area above already allows for the caps: it
+     *is grown by width / 2 on every side, which is exactly their reach.*/
+    if(dsc->round_start)
+        nema_fill_circle_aa(point1.x, point1.y, dsc->width * 0.5f, bg_color);
+    if(dsc->round_end)
+        nema_fill_circle_aa(point2.x, point2.y, dsc->width * 0.5f, bg_color);
+
     nema_cl_submit(&(draw_nema_gfx_unit->cl));
 
 }
