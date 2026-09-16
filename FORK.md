@@ -29,6 +29,8 @@ git remote -v
 | 10 | `nema_gfx`: make FreeType outline text work at all | to submit |
 | 11 | `draw`: count where the drawing actually went | to submit |
 | 12 | `nema_gfx`: give NemaVG the glyph box it already has | to submit |
+| 13 | `nema_gfx`: fill a disc with the disc primitive | to submit |
+| 14 | `nema_gfx`: keep round-capped lines on the accelerator | to submit |
 
 ### 1 — Fill rule
 
@@ -185,6 +187,131 @@ combination had never run:
 Measured after: seven screens at 800x480, 15 to 54 frames per second, no FIFO
 underrun. The board needs a 320 KiB LVGL heap in this mode -- at 192 the SVG
 renderer runs out after five or six screen changes.
+
+### 11 — Knowing where the drawing went
+
+A display's `cpu` figure is `100 - idle`, and `lv_timer.c` computes idle from
+the share of wall clock spent inside `lv_timer_handler()`. Accelerated drawing
+happens inside it, so it counts as processor load: from that number alone there
+is no way to tell a screen the GPU is drawing from one the processor is
+drawing, nor either from a screen that is merely walking its object tree. LVGL
+offers nothing else -- no per-unit counters, no accelerator timing.
+
+`lv_draw_stats` adds tasks taken by an accelerator, tasks the processor drew
+itself, the time spent inside each unit, and a tally by task type, which is
+what says *what* is being drawn. Behind `LV_USE_PERF_MONITOR`, which already
+gates sysmon.
+
+Counted through `lv_draw_stats_took()`, called where a task's state becomes
+`IN_PROGRESS` and nowhere else. Two earlier placements were wrong and both
+produced plausible numbers, which is the danger: counting where a task is
+offered over-counts by 60 %, because a unit is offered tasks it then refuses;
+and counting in `lv_draw_get_next_available_task()` misses every task when
+there is a single draw unit, since `lv_draw_get_available_task()` then takes a
+different branch. The software unit has two dispatch paths, with and without an
+OS, and both need it.
+
+The timing is around `nema_gfx_execute_drawing()` rather than around
+`nema_cl_wait()`: `wait_for_finish_cb` is only reached through `lv_canvas`,
+never by a screen refresh, and the primitives submit their own command lists.
+There is no single point where the processor blocks on the GPU, so what is
+timed is the unit's whole share.
+
+Measured on an STM32U5G9J-DK2, a screen whose lines the driver refuses because
+they have rounded caps -- 10 seconds:
+
+```
+drawn by the accelerator   3084 ms   31 %
+drawn by the processor     1091 ms   11 %
+deciding what to redraw    4354 ms   44 %
+```
+
+Without `sw_busy_ms` the middle row was part of the last one, and the reading
+was that the screen spent nearly all its time deciding. It does not.
+
+### 12 — A glyph box computed again on every frame
+
+`_draw_nema_gfx_outline()` calls `nema_vg_path_set_shape()`, which walks every
+control point of the glyph to build a bounding box. It does that for every
+glyph, of every label, on every frame.
+
+The box is already known. FreeType hands LVGL `box_w`, `box_h`, `ofs_x` and
+`ofs_y` in the glyph descriptor, and the vendor header documents
+`nema_vg_path_set_shape_and_bbox()` as "same functionality as
+`nema_vg_path_set_shape()` but bbox is given by user (reduces CPU
+utilization)". Nothing upstream uses it.
+
+The box has to be expressed in the path's own coordinate space, so the matrix
+built a few lines above is inverted. One unit of margin each side: a box that
+is too small clips the glyph, one slightly too large costs only what this is
+meant to save.
+
+```
+3D scene (755 labels / 5 s)   14.5  ->  15.4   (+6 %)
+typography screen             39.7  ->  39.8   (unchanged)
+```
+
+The gain follows the glyph count, which is what one would expect of a per-glyph
+saving. Checked on the panel at several sizes, accents included -- no clipping.
+
+Also tried and dropped: `nema_vg_set_quality(NEMA_VG_QUALITY_FASTER)` for
+labels, which measured 14.7 and 39.8 against 14.5 and 39.7. Within noise, so
+not worth losing the rendering quality.
+
+### 13 — A disc sent through the rounded rectangle
+
+`lv_draw_nema_gfx_fill.c` chooses between `nema_fill_rect()` and
+`nema_fill_rounded_rect_aa()` on `radius > 0` alone, so a circle -- the case
+`LV_RADIUS_CIRCLE` asks for -- takes the rounded rectangle path. That path is
+not a primitive. `nema_fill_rounded_rect_aa()` lives in `nema_provisional.o`
+and calls `calculate_steps_from_radius`, `nema_sin`, `nema_cos` and
+`nema_raster_triangle_f`: it approximates each corner on the processor and
+emits a triangle per step. `nema_fill_circle_aa()` is 46 bytes of code and
+calls `nema_raster_circle_aa()`, a hardware command.
+
+Measured per call on the STM32U5G9 at 160 MHz, with the cycle counter:
+
+```
+nema_fill_rect              203 cycles     1.3 us
+nema_fill_circle_aa        2600 cycles      16 us
+nema_fill_rounded_rect_aa  9100 cycles      57 us
+```
+
+So a square object whose radius covers half its side is now sent to the circle.
+
+### 14 — Round line caps declined for want of a cap parameter
+
+`nema_gfx_evaluate()` declined every line with `round_start` or `round_end`,
+which sent it to the software renderer whole. The reason is one level down:
+`nema_draw_line_aa()` takes two points, a width and a colour, and has no cap
+parameter at all.
+
+But a round cap is just a disc of half the width centred on the end point, and
+the disc is a primitive (see 11). `lv_draw_nema_gfx_line.c` now draws the line
+flat and adds one `nema_fill_circle_aa()` per rounded end, so the task stays on
+the accelerator. The clip area the function already computes is grown by
+`width / 2` on every side, which is exactly the caps' reach.
+
+The disc is laid over the antialiased edge the line has already written, so
+this holds only while the colour is opaque -- a translucent disc would blend
+with that edge a second time and show a seam. `nema_gfx_evaluate()` therefore
+accepts a capped line only at `LV_OPA_MAX`, and still declines dashed lines,
+whose caps are per dash.
+
+Measured on an STM32U5G9J-DK2, a section drawing whose pipes all have rounded
+caps. Two runs of 75 s each side, means of the published frame rate:
+
+```
+                       fps            accelerated tasks
+without 13 and 14   27.18  28.14            73 %
+with                30.58  29.57           100 %
+```
+
+Nothing is left for the software renderer on that screen. Checked against the
+panel by reading the framebuffer back over SWD: three captures per build, every
+pixel that moves inside a build discarded, and of the 28 874 static pixels that
+remain, 107 differ -- all of them the silo's percentage, which had settled on a
+different value between the two runs.
 
 ## What is still open
 
